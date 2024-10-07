@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "pgm_info.h": "c",
+        "stdbool.h": "c"
+    }
+}
