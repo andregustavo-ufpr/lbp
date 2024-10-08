@@ -1,5 +1,3 @@
-#define _GNU_SOURCE MINGW64_NT-10.0-22631 DESKTOP-O941M1R 3.4.10-bc1f6498.x86_64 2024-09-15 15:08 UTC x86_64 Msys
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <dirent.h>
+#include <bits/getopt_core.h>
 
 typedef struct PGMImage {
     char pgmType[3];
@@ -162,7 +161,8 @@ void freeImage(unsigned char** image, int height) {
     free(image);
 }
 
-int save_to_file(char *file_name, PGMImage *base_image, char **lbp){
+int saveToFile(char *file_name, PGMImage *base_image, unsigned char **lbp){
+    printf("%s", file_name);
     FILE* file = fopen(file_name, "w");
     if (file == NULL) {
         printf("Error opening file for writing!\n");
@@ -188,25 +188,25 @@ int save_to_file(char *file_name, PGMImage *base_image, char **lbp){
     return 0;
 }
 
-double euclidian_distance(int vector_a[256], int vector_b[256]){
+double squaredEuclidianDistance(int vector_a[256], int vector_b[256]){
     double distance = 0;
 
     for(int i = 0; i < 256; i++){
-        distance += pow(vector_a[i] - vector_b[i], 2);
+        distance += (vector_a[i] - vector_b[i])*(vector_a[i] - vector_b[i]);
     }
 
     return sqrt(distance);
 }
 
 // Function to check if a file has the desired extension
-int has_extension(const char *filename, const char *extension) {
+int hasExtension(const char *filename, const char *extension) {
     const char *dot = strrchr(filename, '.');
     if (!dot || dot == filename) return 0; // No extension found
     return strcmp(dot + 1, extension) == 0;
 }
 
 // Function to search files with a specific extension
-void search_files_with_extension(const char *directory) {
+void searchFilesInDirectoryAndCompare(const char *directory) {
     struct dirent *entry;
     DIR *dp = opendir(directory);
 
@@ -220,7 +220,7 @@ void search_files_with_extension(const char *directory) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        if (has_extension(entry->d_name, "lbp")) {
+        if (hasExtension(entry->d_name, "lbp")) {
 
             //Compare euclidian distance between lbp file and reference image
             printf("Found file: %s\n", entry->d_name);
@@ -229,66 +229,68 @@ void search_files_with_extension(const char *directory) {
 
     closedir(dp);
 }
+
+void saveHistogramFile(char *file_name, int *histogram){
+    // Write the histogram to the file
+    FILE* histogram_file = fopen(strcat(file_name, ".lbp"), "w");
+    
+    for (int i = 0; i < 256; i++) {
+        fprintf(histogram_file, "%d\n", histogram[i]);
+    }
+
+    fclose(histogram_file);
+}
    
 int main(int argc, char **argv){
-    search_files_with_extension("./base");
-
-    // char next_option;
-    // char *reference_image, *output_image_name, *reference_base_path;
+    char next_option;
+    char *reference_image, *output_image_name, *reference_base_path;
     
-    // while((next_option = getopt(argc, argv, "i:d::o::")) != -1){
-    //     switch(next_option){
-    //         case 'i':
-    //             reference_image = optarg;
-    //             break;
-    //         case 'o':
-    //             output_image_name = optarg;
-    //             break;
-    //         case 'd':
-    //             reference_base_path = optarg;
-    //             break;
-    //         default:
-    //             perror("%Argumentos: -i [Imagem a ser analisada] -d [Diretorio de imagens base] -o [Nome da imagem LBP gerada]");
-    //             return 1;
-    //     }
-    // }
+    while((next_option = getopt(argc, argv, "i:d::o::")) != -1){
+        switch(next_option){
+            case 'i':
+                reference_image = optarg;
+                break;
+            case 'o':
+                output_image_name = optarg;
+                break;
+            case 'd':
+                reference_base_path = optarg;
+                break;
+            default:
+                perror("%Argumentos: -i [Imagem a ser analisada] -d [Diretorio de imagens base] -o [Nome da imagem LBP gerada]");
+                return 1;
+        }
+    }
 
-    // PGMImage* pgm = malloc(sizeof(PGMImage));
+    PGMImage* pgm = malloc(sizeof(PGMImage));
     
-    // bool opened = openPGM(pgm, reference_image);
+    bool opened = openPGM(pgm, reference_image);
 
-    // if(opened){
-    //     unsigned char** lbpImage = allocateImage(pgm->width, pgm->height);
+    if(opened){
+        unsigned char** lbpImage = allocateImage(pgm->width, pgm->height);
+        int histogram[256];
 
-    //     applyLBP(pgm->data, lbpImage, pgm->width, pgm->height);
+        applyLBP(pgm->data, lbpImage, pgm->width, pgm->height);
+        computeLBPHistogram(lbpImage, pgm->width, pgm->height, histogram);
         
-    //     if(output_image_name != NULL){
-            
-    //         if(save_to_file(output_image_name, pgm, lbpImage) != 1){
-    //             return 1;
-    //         }
-    //     }
+        if(output_image_name != NULL){
+            printf("output");
+            if(saveToFile(output_image_name, pgm, lbpImage) != 1){
+                return 1;
+            }
+        }
+        else if(reference_base_path != NULL){
+            searchFilesInDirectoryAndCompare(reference_base_path);
+        }
+        // Inserir aqui o algoritmo de medir distancia euclidiana
+        // Percorrer toda a base, achar todos os files .lbp
+        // Medir distancia euclidiana e mostrar a menor distancia
+        
+        saveHistogramFile(reference_image, histogram);
 
-        
-    //     // Inserir aqui o algoritmo de medir distancia euclidiana
-    //     // Percorrer toda a base, achar todos os files .lbp
-    //     // Medir distancia euclidiana e mostrar a menor distancia
-    
-    //     int hist[256];
-    //     computeLBPHistogram(lbpImage, pgm->width, pgm->height, hist);
-        
-    //     // Write the histogram to the file
-    //     FILE* histogram_file = fopen(strcat(reference_image, ".lbp"), "w");
-        
-    //     for (int i = 0; i < 256; i++) {
-    //         fprintf(histogram_file, "%d\n", hist[i]);
-    //     }
-
-        
-
-    //     freeImage(lbpImage, pgm->height);
-    //     freeImage(pgm->data, pgm->height);
-    // }
+        freeImage(lbpImage, pgm->height);
+        freeImage(pgm->data, pgm->height);
+    }
     
     return 0;
 }

@@ -1,12 +1,12 @@
 TARGET = lbp
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -lm
 
 $(TARGET): main.o	
-	$(CC) $(CFLAGS) -o $(TARGET) main.o
+	$(CC) -o $(TARGET) main.o $(CFLAGS)
 
 main.o: main.c
-	$(CC) $(CFLAGS) -c main.c
+	$(CC) -c main.c $(CFLAGS)
 
 clean:
 	rm -f $(TARGET) *.o
