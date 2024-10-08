@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "pgm_info.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "unistd.h": "c",
+        "stdlib.h": "c"
     }
 }

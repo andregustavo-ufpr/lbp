@@ -1,9 +1,13 @@
+#define _GNU_SOURCE MINGW64_NT-10.0-22631 DESKTOP-O941M1R 3.4.10-bc1f6498.x86_64 2024-09-15 15:08 UTC x86_64 Msys
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
+#include <dirent.h>
 
 typedef struct PGMImage {
     char pgmType[3];
@@ -46,7 +50,6 @@ void computeLBPHistogram(unsigned char** lbpImage, int width, int height, int* h
     }
 }
 
-
 void applyLBP(unsigned char** image, unsigned char** lbpImage, int width, int height) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
@@ -74,7 +77,6 @@ void ignoreComments(FILE* fp)
     else
         fseek(fp, -1, SEEK_CUR);
 }
- 
 
 // Function to open the input a PGM
 // file and process it
@@ -186,63 +188,107 @@ int save_to_file(char *file_name, PGMImage *base_image, char **lbp){
     return 0;
 }
 
+double euclidian_distance(int vector_a[256], int vector_b[256]){
+    double distance = 0;
+
+    for(int i = 0; i < 256; i++){
+        distance += pow(vector_a[i] - vector_b[i], 2);
+    }
+
+    return sqrt(distance);
+}
+
+// Function to check if a file has the desired extension
+int has_extension(const char *filename, const char *extension) {
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return 0; // No extension found
+    return strcmp(dot + 1, extension) == 0;
+}
+
+// Function to search files with a specific extension
+void search_files_with_extension(const char *directory) {
+    struct dirent *entry;
+    DIR *dp = opendir(directory);
+
+    if (dp == NULL) {
+        perror("Unable to open directory");
+        return;
+    }
+
+    while ((entry = readdir(dp))) {
+        // Skip current and parent directory entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        if (has_extension(entry->d_name, "lbp")) {
+
+            //Compare euclidian distance between lbp file and reference image
+            printf("Found file: %s\n", entry->d_name);
+        }
+    }
+
+    closedir(dp);
+}
+   
 int main(int argc, char **argv){
-    char next_option;
-    char *reference_image, *output_image_name, *reference_base_path;
+    search_files_with_extension("./base");
+
+    // char next_option;
+    // char *reference_image, *output_image_name, *reference_base_path;
     
-    while((next_option = getopt(argc, argv, "i:d::o::")) != -1){
-        switch(next_option){
-            case 'i':
-                reference_image = optarg;
-                break;
-            case 'o':
-                output_image_name = optarg;
-                break;
-            case 'd':
-                reference_base_path = optarg;
-                break;
-            default:
-                perror("%Argumentos: -i [Imagem a ser analisada] -d [Diretorio de imagens base] -o [Nome da imagem LBP gerada]");
-                return 1;
-        }
-    }
+    // while((next_option = getopt(argc, argv, "i:d::o::")) != -1){
+    //     switch(next_option){
+    //         case 'i':
+    //             reference_image = optarg;
+    //             break;
+    //         case 'o':
+    //             output_image_name = optarg;
+    //             break;
+    //         case 'd':
+    //             reference_base_path = optarg;
+    //             break;
+    //         default:
+    //             perror("%Argumentos: -i [Imagem a ser analisada] -d [Diretorio de imagens base] -o [Nome da imagem LBP gerada]");
+    //             return 1;
+    //     }
+    // }
 
-    PGMImage* pgm = malloc(sizeof(PGMImage));
+    // PGMImage* pgm = malloc(sizeof(PGMImage));
     
-    bool opened = openPGM(pgm, reference_image);
+    // bool opened = openPGM(pgm, reference_image);
 
-    if(opened){
-        unsigned char** lbpImage = allocateImage(pgm->width, pgm->height);
+    // if(opened){
+    //     unsigned char** lbpImage = allocateImage(pgm->width, pgm->height);
 
-        applyLBP(pgm->data, lbpImage, pgm->width, pgm->height);
+    //     applyLBP(pgm->data, lbpImage, pgm->width, pgm->height);
         
-        if(output_image_name != NULL){
+    //     if(output_image_name != NULL){
             
-            if(save_to_file(output_image_name, pgm, lbpImage) != 1){
-                return 1;
-            }
-        }
+    //         if(save_to_file(output_image_name, pgm, lbpImage) != 1){
+    //             return 1;
+    //         }
+    //     }
 
         
-        // Inserir aqui o algoritmo de medir distancia euclidiana
-        // Percorrer toda a base, achar todos os files .lbp
-        // Medir distancia euclidiana e mostrar a menor distancia
+    //     // Inserir aqui o algoritmo de medir distancia euclidiana
+    //     // Percorrer toda a base, achar todos os files .lbp
+    //     // Medir distancia euclidiana e mostrar a menor distancia
     
-        int hist[256];
-        computeLBPHistogram(lbpImage, pgm->width, pgm->height, hist);
+    //     int hist[256];
+    //     computeLBPHistogram(lbpImage, pgm->width, pgm->height, hist);
         
-        // Write the histogram to the file
-        FILE* histogram_file = fopen(strcat(reference_image, ".lbp"), "w");
+    //     // Write the histogram to the file
+    //     FILE* histogram_file = fopen(strcat(reference_image, ".lbp"), "w");
         
-        for (int i = 0; i < 256; i++) {
-            fprintf(histogram_file, "%d\n", hist[i]);
-        }
+    //     for (int i = 0; i < 256; i++) {
+    //         fprintf(histogram_file, "%d\n", hist[i]);
+    //     }
 
         
 
-        freeImage(lbpImage, pgm->height);
-        freeImage(pgm->data, pgm->height);
-    }
+    //     freeImage(lbpImage, pgm->height);
+    //     freeImage(pgm->data, pgm->height);
+    // }
     
     return 0;
 }
