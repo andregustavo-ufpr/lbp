@@ -6,8 +6,11 @@
 #include <string.h>
 #include <math.h>
 #include <dirent.h>
+#include <getopt.h>
 
 #define LINES_HISTOGRAM 256
+#define SPACE_AS_OPTARG (((!optarg) && (optind < argc) && (argv[optind][0] != '-')) \
+    ? (optarg = argv[optind++]): 0)
 
 typedef struct PGMImage {
     char pgmType[3];
@@ -45,7 +48,7 @@ unsigned char computeLBP(unsigned char** image, int x, int y, int width, int hei
     return lbp;
 }
 
-void computeLBPHistogram(unsigned char** lbpImage, int width, int height, int* histogram) {
+void computeLBPHistogram(unsigned char** lbp_image, int width, int height, int* histogram) {
     // Initialize the histogram array (256 bins for 8-bit LBP values)
     for (int i = 0; i < LINES_HISTOGRAM; i++) {
         histogram[i] = 0;
@@ -54,16 +57,16 @@ void computeLBPHistogram(unsigned char** lbpImage, int width, int height, int* h
     // Count occurrences of each LBP value
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            unsigned char lbpValue = lbpImage[y][x];
-            histogram[lbpValue]++;
+            unsigned char lbpValue = lbp_image[y][x];
+            histogram[lbpValue] += 1;
         }
     }
 }
 
-void applyLBP(unsigned char** image, unsigned char** lbpImage, int width, int height) {
+void applyLBP(unsigned char** image, unsigned char** lbp_image, int width, int height) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            lbpImage[y][x] = computeLBP(image, x, y, width, height);
+            lbp_image[y][x] = computeLBP(image, x, y, width, height);
         }
     }
 }
@@ -230,7 +233,8 @@ int hasExtension(const char *filename, const char *extension) {
 void searchFilesInDirectoryAndCompare(const char *directory, int reference_histogram[LINES_HISTOGRAM]) {
     struct dirent *entry;
     DIR *dp = opendir(directory);
-    double min_euclidian_dist = 9999999999999;
+    double min_euclidian_dist = 10000;
+    unsigned int saved = 0;
     char min_file_name[100];
 
     if (dp == NULL) {
@@ -238,38 +242,51 @@ void searchFilesInDirectoryAndCompare(const char *directory, int reference_histo
         return;
     }
 
+    chdir(directory);
+
     while ((entry = readdir(dp))) {
         // Skip current and parent directory entries
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
             continue;
-
+        }
+                
         if (hasExtension(entry->d_name, "lbp")) {
             int i = 0;
-            char line_buffer[100];
+            char *line_buffer = malloc(sizeof(char)*100);
             int hist_values[LINES_HISTOGRAM];
             double euclidian_dist = 0;
 
             FILE *file = fopen(entry->d_name, "r");
 
-            while (i < LINES_HISTOGRAM && fgets(line_buffer, sizeof(line_buffer), file) != NULL) {
-                // Convert the line to a float (or int) and store it in the array
-                hist_values[i] = atoi(line_buffer); 
-                i++;
-            }
+            if(file != NULL){
+                while(
+                    (i < LINES_HISTOGRAM) && 
+                    (fgets(line_buffer, sizeof(line_buffer), file) != NULL)
+                ) {
+                    // Convert the line to a int and store it in the array
+                    hist_values[i] = atoi(line_buffer); 
+                    i++;
+                }
 
-            fclose(file);
+                fclose(file);
+                free(line_buffer);
 
-            euclidian_dist = squaredEuclidianDistance(hist_values, reference_histogram);
+                euclidian_dist = squaredEuclidianDistance(hist_values, reference_histogram);
 
-            if(euclidian_dist <= min_euclidian_dist){
-                min_euclidian_dist = euclidian_dist;
-                strcpy(min_file_name, entry->d_name);
+                if((euclidian_dist <= min_euclidian_dist) || (saved == 0)){
+                    saved=1;
+                    min_euclidian_dist = euclidian_dist;
+                    strcpy(min_file_name, entry->d_name);
+                }
             }
         }
     }
 
     closedir(dp);
-    printf("Imagem mais similar: %s %.6f", min_file_name, min_euclidian_dist);
+    printf("Imagem mais similar: %s %.6f\n", 
+        min_file_name, 
+        min_euclidian_dist
+    );
 }
 
 char *removeExtension(char* myStr) {
@@ -285,19 +302,21 @@ char *removeExtension(char* myStr) {
 }
 
 void saveHistogramFile(char *file_name, int *histogram){
+    char *name_without_extension = removeExtension(file_name);
 
-    FILE* histogram_file = fopen(strcat(removeExtension(file_name), ".lbp"), "w");
+    FILE* histogram_file = fopen(strcat(name_without_extension, ".lbp"), "w");
     
     for (int i = 0; i < LINES_HISTOGRAM; i++) {
         fprintf(histogram_file, "%d\n", histogram[i]);
     }
 
     fclose(histogram_file);
+    free(name_without_extension);
 }
    
 int main(int argc, char **argv){
     char next_option;
-    char *reference_image, *output_image_name, *reference_base_path;
+    char *reference_image = NULL, *output_image_name = NULL, *reference_base_path = NULL;
     
     while((next_option = getopt(argc, argv, "i:d::o::")) != -1){
         switch(next_option){
@@ -305,9 +324,11 @@ int main(int argc, char **argv){
                 reference_image = optarg;
                 break;
             case 'o':
+                if(!SPACE_AS_OPTARG) exit(1);
                 output_image_name = optarg;
                 break;
             case 'd':
+                if(!SPACE_AS_OPTARG) exit(1);
                 reference_base_path = optarg;
                 break;
             default:
@@ -321,25 +342,24 @@ int main(int argc, char **argv){
     bool opened = openPGM(pgm, reference_image);
 
     if(opened){
-        unsigned char** lbpImage = allocateImage(pgm->width, pgm->height);
-        int histogram[LINES_HISTOGRAM];
+        unsigned char** lbp_image= allocateImage(pgm->width, pgm->height);
+        int *histogram= (int *) malloc(sizeof(int)*LINES_HISTOGRAM);
 
-        applyLBP(pgm->data, lbpImage, pgm->width, pgm->height);
-        computeLBPHistogram(lbpImage, pgm->width, pgm->height, histogram);
+        applyLBP(pgm->data, lbp_image, pgm->width, pgm->height);
+        computeLBPHistogram(lbp_image, pgm->width, pgm->height, histogram);
         
         if(output_image_name != NULL){
-            saveToFile(output_image_name, pgm, lbpImage);
-            saveHistogramFile(reference_image, histogram);
+            saveToFile(output_image_name, pgm, lbp_image);
+            saveHistogramFile(output_image_name, histogram);
         }
         else if(reference_base_path != NULL){
             searchFilesInDirectoryAndCompare(reference_base_path, histogram);
-            saveHistogramFile(reference_image, histogram);
         }
         
-        
-
-        freeImage(lbpImage, pgm->height);
+        free(histogram);
+        freeImage(lbp_image, pgm->height);
         freeImage(pgm->data, pgm->height);
+        free(pgm);
     }
     
     return 0;
