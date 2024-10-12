@@ -3,6 +3,10 @@
         "pgm_info.h": "c",
         "stdbool.h": "c",
         "unistd.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "ctype.h": "c",
+        "stdio.h": "c",
+        "cstdlib": "c",
+        "file.h": "c"
     }
 }

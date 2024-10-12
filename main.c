@@ -1,216 +1,12 @@
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <string.h>
+#include "lbp.h"
+#include "file.h"
+
 #include <math.h>
 #include <dirent.h>
 #include <getopt.h>
 
-#define LINES_HISTOGRAM 256
 #define SPACE_AS_OPTARG (((!optarg) && (optind < argc) && (argv[optind][0] != '-')) \
     ? (optarg = argv[optind++]): 0)
-
-typedef struct PGMImage {
-    char pgmType[3];
-    unsigned char** data;
-    unsigned int width;
-    unsigned int height;
-    unsigned int maxValue;
-} PGMImage;
-
-// Function to compute the LBP value for a pixel
-unsigned char computeLBP(unsigned char** image, int x, int y, int width, int height) {
-    unsigned char center = image[y][x];  // Center pixel
-    unsigned char lbp = 0;               // LBP value
-    int bitPos = 0;                      // Bit position to set
-
-    if(y == 0 || x == 0 || x == width -1 || y == height - 1){
-        return lbp;
-    }
-    
-    // Iterate over 3x3 neighborhood
-    for (int i = -1; i <= 1; i++) {
-        for (int j = -1; j <= 1; j++) {
-            if (i == 0 && j == 0) continue;  // Skip center pixel
-            
-            // Get neighboring pixel value
-            unsigned char neighbor = image[y + i][x + j];
-
-            // Shift bit position and set LBP bit
-            lbp |= (neighbor >= center) << bitPos;  // Set bit if neighbor >= center
-            
-            bitPos++;  // Move to the next bit
-        }
-    }
-    
-    return lbp;
-}
-
-void computeLBPHistogram(unsigned char** lbp_image, int width, int height, int* histogram) {
-    // Initialize the histogram array (256 bins for 8-bit LBP values)
-    for (int i = 0; i < LINES_HISTOGRAM; i++) {
-        histogram[i] = 0;
-    }
-
-    // Count occurrences of each LBP value
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            unsigned char lbpValue = lbp_image[y][x];
-            histogram[lbpValue] += 1;
-        }
-    }
-}
-
-void applyLBP(unsigned char** image, unsigned char** lbp_image, int width, int height) {
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            lbp_image[y][x] = computeLBP(image, x, y, width, height);
-        }
-    }
-}
-
-// in file
-void ignoreComments(FILE* fp)
-{
-    int ch;
-    char line[100];
- 
-    // Ignore any blank lines
-    while ((ch = fgetc(fp)) != EOF && isspace(ch));
- 
-    // Recursively ignore comments
-    // in a PGM image commented lines
-    // start with a '#'
-    if (ch == '#') {
-        fgets(line, sizeof(line), fp);
-        ignoreComments(fp);
-    }
-    else
-        fseek(fp, -1, SEEK_CUR);
-}
-
-// Function to open the input a PGM
-// file and process it
-bool openPGM(PGMImage* pgm, const char* filename)
-{
-    // Open the image file in the
-    // 'read binary' mode
-    FILE* pgmfile = fopen(filename, "rb");
- 
-    // If file does not exist,
-    // then return
-    if (pgmfile == NULL) {
-        printf("File does not exist\n");
-        return false;
-    }
- 
-    ignoreComments(pgmfile);
-    fscanf(pgmfile, "%s", pgm->pgmType);
- 
-    // Check for correct PGM Binary
-    // file type
-    if (strcmp(pgm->pgmType, "P5")) {
-        fprintf(stderr, "Wrong file type!\n");
-        exit(EXIT_FAILURE);
-    }
- 
-    ignoreComments(pgmfile);
- 
-    // Read the image dimensions
-    fscanf(pgmfile, "%d %d", &(pgm->width), &(pgm->height));
- 
-    ignoreComments(pgmfile);
- 
-    // Read maximum gray value
-    fscanf(pgmfile, "%d", &(pgm->maxValue));
-    ignoreComments(pgmfile);
- 
-    // Allocating memory to store
-    // img info in defined struct
-    pgm->data = malloc(pgm->height * sizeof(unsigned char*));
- 
-    // Storing the pixel info in
-    // the struct
-    if (pgm->pgmType[1] == '5') {
- 
-        fgetc(pgmfile);
- 
-        for (int i = 0;
-             i < pgm->height; i++) {
-            pgm->data[i] = malloc(pgm->width * sizeof(unsigned char));
- 
-            // If memory allocation
-            // is failed
-            if (pgm->data[i] == NULL) {
-                fprintf(stderr, "malloc failed\n");
-                exit(1);
-            }
- 
-            // Read the gray values and
-            // write on allocated memory
-            fread(pgm->data[i], sizeof(unsigned char), pgm->width, pgmfile);
-        }
-    }
- 
-    // Close the file
-    fclose(pgmfile);
- 
-    return true;
-}
-
-unsigned char** allocateImage(int width, int height) {
-    unsigned char **image = (unsigned char **)malloc(height * sizeof(unsigned char *));
-    for (int i = 0; i < height; i++) {
-        image[i] = (unsigned char *)malloc(width * sizeof(unsigned char));
-        if (image[i] == NULL) {
-            printf("Memory allocation failed at row %d!\n", i);
-            break;
-        }
-    }
-
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            image[i][j] = 0;
-        }
-    }
-
-    return image;
-}
-
-void freeImage(unsigned char** image, int height) {
-    for (int i = 0; i < height; i++) {
-        free(image[i]);
-    }
-    free(image);
-}
-
-int saveToFile(char *file_name, PGMImage *base_image, unsigned char **lbp){
-    FILE* file = fopen(file_name, "w");
-    if (file == NULL) {
-        printf("Error opening file for writing!\n");
-        
-        return 1;
-    }
-
-    fprintf(file, "%s \n", base_image->pgmType);
-    fprintf(file, "%d %d\n", base_image->width, base_image->height);
-    fprintf(file, "%d \n", base_image->maxValue);
-
-    // Write the LBP image to the file
-    for (int y = 0; y < base_image->height; y++) {
-        for (int x = 0; x < base_image->width; x++) {
-            fprintf(file, "%3d ", lbp[y][x]);
-        }
-        fprintf(file, "\n");
-    }
-
-    // Close the file
-    fclose(file);
-
-    return 0;
-}
 
 double squaredEuclidianDistance(int vector_a[LINES_HISTOGRAM], int vector_b[LINES_HISTOGRAM]){
     double distance = 0;
@@ -283,10 +79,15 @@ void searchFilesInDirectoryAndCompare(const char *directory, int reference_histo
     }
 
     closedir(dp);
-    printf("Imagem mais similar: %s %.6f\n", 
-        min_file_name, 
-        min_euclidian_dist
-    );
+    if(saved == 1){
+        printf("Imagem mais similar: %s %.6f\n", 
+            min_file_name, 
+            sqrt(min_euclidian_dist)
+        );
+        return;
+    }
+
+    printf("Não foram encontrados nenhum arquivo com extensão .lbp na pasta de destino");
 }
 
 char *removeExtension(char* myStr) {
